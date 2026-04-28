@@ -1,0 +1,34 @@
+name: Cashbarber - Automated Scheduler
+
+on:
+  schedule:
+    - cron: '1 3 * * 0'  # 00:01 BRT (UTC-3) = 03:01 UTC, every Sunday
+  workflow_dispatch:      # allows manual execution from GitHub
+
+jobs:
+  schedule:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run scheduler
+        env:
+          CASHBARBER_EMAIL: ${{ secrets.CASHBARBER_EMAIL }}
+          CASHBARBER_PASSWORD: ${{ secrets.CASHBARBER_PASSWORD }}
+          CASHBARBER_TENANT: ${{ secrets.CASHBARBER_TENANT }}
+          CASHBARBER_BRANCH_ID: ${{ secrets.CASHBARBER_BRANCH_ID }}
+          CASHBARBER_USER_ID: ${{ secrets.CASHBARBER_USER_ID }}
+          CASHBARBER_SERVICES: ${{ secrets.CASHBARBER_SERVICES }}
+          CASHBARBER_START_TIME: ${{ secrets.CASHBARBER_START_TIME }}
+          CASHBARBER_END_TIME: ${{ secrets.CASHBARBER_END_TIME }}
+        run: python src/agendar.py
