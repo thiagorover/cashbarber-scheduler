@@ -1,8 +1,6 @@
 name: Cashbarber - Automated Scheduler
 
 on:
-  schedule:
-    - cron: '1 3 * * 0'  # 00:01 BRT (UTC-3) = 03:01 UTC, every Sunday
   workflow_dispatch:      # allows manual execution from GitHub
 
 jobs:
