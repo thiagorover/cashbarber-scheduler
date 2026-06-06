@@ -14,8 +14,10 @@ TENANT      = os.environ.get("CASHBARBER_TENANT", "")
 BRANCH_ID   = int(os.environ.get("CASHBARBER_BRANCH_ID", "0"))
 USER_ID     = int(os.environ.get("CASHBARBER_USER_ID", "0"))
 SERVICES    = [int(x) for x in os.environ.get("CASHBARBER_SERVICES", "").split(",") if x]
-START_TIME  = os.environ.get("CASHBARBER_START_TIME", "11:00")
-END_TIME    = os.environ.get("CASHBARBER_END_TIME", "12:00")
+START_TIME  = os.environ.get("CASHBARBER_START_TIME", "12:00")
+END_TIME    = os.environ.get("CASHBARBER_END_TIME", "13:00")
+BOT_TOKEN   = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+CHAT_ID     = os.environ.get("TELEGRAM_CHAT_ID", "")
 
 BASE_URL    = "https://api.cashbarber.com.br"
 
@@ -150,11 +152,33 @@ def schedule():
         print(f"Status: {result.get('age_status')}")
         print(f"Start: {result.get('age_inicio')}")
         print(f"End: {result.get('age_fim')}")
+
+        send_telegram(
+            f"✅ Agendamento Realizado com Sucesso!\n"
+            f"📅 Data: {result.get('age_inicio')}\n"
+            f"🕐 Término: {result.get('age_fim')}\n"
+            f"🆔 ID: {result.get('id')}"
+        )
     elif response.status_code == 401:
         print("Invalid credentials.")
     else:
         print(f"Scheduling failed.")
         print(f"Response: {response.text}")
+        send_telegram(
+            f"⚠️ Horário das {START_TIME} indisponível para {date}.\n"
+            f"Acesse o site para escolher outro horário:\n"
+            f"https://cashbarber.com.br/barbeariadeluno/inicio"
+        )
+
+
+def send_telegram(message):
+    payload = {
+        "chat_id": CHAT_ID,
+        "text": message
+    }    
+    response = requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json=payload)
+    return response
+
 
 if __name__ == "__main__":
     schedule()
