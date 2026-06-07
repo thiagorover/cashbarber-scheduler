@@ -20,6 +20,9 @@ jobs:
         run: pip install requests
 
       - name: Run scheduler
+        run: |
+          echo "BOT_TOKEN length: ${#TELEGRAM_BOT_TOKEN}"
+          echo "CHAT_ID length: ${#TELEGRAM_CHAT_ID}"
         env:
           CASHBARBER_EMAIL: ${{ secrets.CASHBARBER_EMAIL }}
           CASHBARBER_PASSWORD: ${{ secrets.CASHBARBER_PASSWORD }}
@@ -29,4 +32,6 @@ jobs:
           CASHBARBER_SERVICES: ${{ secrets.CASHBARBER_SERVICES }}
           CASHBARBER_START_TIME: ${{ secrets.CASHBARBER_START_TIME }}
           CASHBARBER_END_TIME: ${{ secrets.CASHBARBER_END_TIME }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python src/agendar.py
