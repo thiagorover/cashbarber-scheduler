@@ -42,31 +42,38 @@ def validate_config():
 
 def login():
     print("Logging in...")
-    response = requests.post(
-        f"{BASE_URL}/api/auth/login",
-        json={
-            "email": EMAIL,
-            "password": PASSWORD,
-            "captchaToken": None
-        },
-        headers={
-            "Content-Type": "application/json",
-            "Accept": "application/json, text/plain, */*",
-            "Origin": "https://cashbarber.com.br",
-            "Referer": "https://cashbarber.com.br/",
-            "X-Context": "cliente",
-            "X-Tenant": TENANT,
-        }
-    )
+    try:
+        response = requests.post(
+            f"{BASE_URL}/api/auth/login",
+            json={
+                "email": EMAIL,
+                "password": PASSWORD,
+                "captchaToken": None
+            },
+            headers={
+                "Content-Type": "application/json",
+                "Accept": "application/json, text/plain, */*",
+                "Origin": "https://cashbarber.com.br",
+                "Referer": "https://cashbarber.com.br/",
+                "X-Context": "cliente",
+                "X-Tenant": TENANT,
+            }
+        )
+    except requests.exceptions.RequestException as e:
+        print(f"Network error during login: {e}")
+        send_telegram(f"⚠️ Erro de conexão durante o login: {e}")
+        exit(1)
 
     if response.status_code != 200:
         print(f"Login failed. Status: {response.status_code}")
         print(f"Response: {response.text}")
+        send_telegram(f"⚠️ Falha no login. Status: {response.status_code}")
         exit(1)
-
+    
     token = response.headers.get("X-Session-Token")
     if not token:
         print("Token not found in login response.")
+        send_telegram("⚠️ Token não encontrado na resposta do login.")
         exit(1)
 
     print("Login successful.")
@@ -82,7 +89,13 @@ def next_saturday():
 
 def already_scheduled(headers, date):
     url = f"{BASE_URL}/api/{TENANT}/web/agendamentos/list?page=1"
-    response = requests.post(url, json={}, headers=headers)
+    
+    try:
+        response = requests.post(url, json={}, headers=headers)
+    except requests.exceptions.RequestException as e:
+        print(f"Network error while fetching appointments: {e}")
+        send_telegram(f"⚠️ Erro de conexão ao buscar agendamentos: {e}")
+        exit(1)
 
     if response.status_code != 200:
         print(f"Error fetching appointments. Status: {response.status_code}")
@@ -94,11 +107,11 @@ def already_scheduled(headers, date):
 
     for appointment in upcoming:
         if date in appointment.get("age_inicio", "") and appointment.get("age_status") == "Agendado":
-            print(f"Appointment already exists for {date}. Nothing to do.")
+            print(f"Appointment already exists for {date}.")
             print(f"Existing ID: {appointment.get('id')} | Time: {appointment.get('age_inicio')}")
-            return True
+            return appointment
 
-    return False
+    return None
 
 def schedule():
     print("=" * 50)
@@ -122,9 +135,15 @@ def schedule():
     date = next_saturday()
     print(f"\nNext Saturday: {date}")
 
-    if already_scheduled(headers, date):
+    existing = already_scheduled(headers, date)
+    if existing:
+        send_telegram(
+            f"📅 O Agendamento para {date} já existe!\n"
+            f"🆔 ID: {existing.get('id')}\n"
+            f"🕐 Horário: {existing.get('age_inicio')}"
+        )
         exit(0)
-
+        
     start = f"{date} {START_TIME}:00"
     end   = f"{date} {END_TIME}:00"
 
@@ -139,17 +158,22 @@ def schedule():
         "servicos": SERVICES
     }
 
-    response = requests.post(
-        f"{BASE_URL}/api/{TENANT}/web/agendamentos",
-        json=payload,
-        headers=headers
-    )
+    try:
+        response = requests.post(
+            f"{BASE_URL}/api/{TENANT}/web/agendamentos",
+            json=payload,
+            headers=headers
+        )
+    except requests.exceptions.RequestException as e:
+        print(f"Network error while scheduling appointment: {e}")
+        send_telegram(f"⚠️ Erro de conexão ao agendar: {e}")
+        exit(1)
 
     print(f"\nStatus: {response.status_code}")
 
     if response.status_code in [200, 201]:
         result = response.json()
-        print(f"Appointment successfully scheduled!")
+        print("Appointment successfully scheduled!")
         print(f"ID: {result.get('id')}")
         print(f"Status: {result.get('age_status')}")
         print(f"Start: {result.get('age_inicio')}")
@@ -164,27 +188,26 @@ def schedule():
     elif response.status_code == 401:
         print("Invalid credentials.")
     else:
-        print(f"Scheduling failed.")
+        print("Scheduling failed.")
         print(f"Response: {response.text}")
         send_telegram(
             f"⚠️ Horário das {START_TIME} indisponível para {date}.\n"
             f"Acesse o site para escolher outro horário:\n"
-            f"https://cashbarber.com.br/barbeariadeluno/inicio"
+             "https://cashbarber.com.br/barbeariadeluno/inicio"
         )
 
 
 def send_telegram(message):
-    print(f"DEBUG BOT_TOKEN: '{BOT_TOKEN}'")
-    print(f"DEBUG CHAT_ID: '{CHAT_ID}'")
-    
     payload = {
         "chat_id": CHAT_ID,
         "text": message
-    }    
-    response = requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json=payload)
-    print(f"Telegram status: {response.status_code}")
-    print(f"Telegram response: {response.text}")
+    }
 
+    try:
+        response = requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json=payload)
+    except requests.exceptions.RequestException as e:
+        print(f"Network error while sending Telegram message: {e}")
+        return None
     return response
 
 
