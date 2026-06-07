@@ -20,9 +20,6 @@ jobs:
         run: pip install requests
 
       - name: Run scheduler
-        run: |
-          echo "BOT_TOKEN length: ${#TELEGRAM_BOT_TOKEN}"
-          echo "CHAT_ID length: ${#TELEGRAM_CHAT_ID}"
         env:
           CASHBARBER_EMAIL: ${{ secrets.CASHBARBER_EMAIL }}
           CASHBARBER_PASSWORD: ${{ secrets.CASHBARBER_PASSWORD }}
