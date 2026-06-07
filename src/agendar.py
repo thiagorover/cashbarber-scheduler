@@ -133,14 +133,18 @@ def schedule():
     }
 
     date = next_saturday()
-    print(f"\nNext Saturday: {date}")
+
+    date_datetime = datetime.strptime(date, "%Y-%m-%d")
+    date_formatted = date_datetime.strftime('%d/%m/%Y')
+    print(f"\nNext Saturday: {date_formatted}")
 
     existing = already_scheduled(headers, date)
+    
     if existing:
         send_telegram(
-            f"📅 O Agendamento para {date} já existe!\n"
+            f"📅 O Agendamento para {date_formatted} já existe!\n"
             f"🆔 ID: {existing.get('id')}\n"
-            f"🕐 Horário: {existing.get('age_inicio')}"
+            f"🕐 Horário: {format_datetime(existing.get('age_inicio'))}"
         )
         exit(0)
         
@@ -176,13 +180,13 @@ def schedule():
         print("Appointment successfully scheduled!")
         print(f"ID: {result.get('id')}")
         print(f"Status: {result.get('age_status')}")
-        print(f"Start: {result.get('age_inicio')}")
-        print(f"End: {result.get('age_fim')}")
+        print(f"Start: {format_datetime(result.get('age_inicio'))}")
+        print(f"End: {format_datetime(result.get('age_fim'))}")
 
         send_telegram(
             f"✅ Agendamento Realizado com Sucesso!\n"
-            f"📅 Data: {result.get('age_inicio')}\n"
-            f"🕐 Término: {result.get('age_fim')}\n"
+            f"📅 Data: {format_datetime(result.get('age_inicio'))}\n"
+            f"🕐 Término: {format_datetime(result.get('age_fim'))}\n"
             f"🆔 ID: {result.get('id')}"
         )
     elif response.status_code == 401:
@@ -191,7 +195,7 @@ def schedule():
         print("Scheduling failed.")
         print(f"Response: {response.text}")
         send_telegram(
-            f"⚠️ Horário das {START_TIME} indisponível para {date}.\n"
+            f"⚠️ Horário das {START_TIME} indisponível para {date_formatted}.\n"
             f"Acesse o site para escolher outro horário:\n"
              "https://cashbarber.com.br/barbeariadeluno/inicio"
         )
@@ -210,6 +214,11 @@ def send_telegram(message):
         return None
     return response
 
+def format_datetime(dt_string):
+    # Converte "2026-06-13 12:00:00" em objeto datetime
+    dt = datetime.strptime(dt_string, "%Y-%m-%d %H:%M:%S")
+    # Formata como "13/06/2026 às 12:00"
+    return dt.strftime("%d/%m/%Y às %H:%M")
 
 if __name__ == "__main__":
    schedule()
