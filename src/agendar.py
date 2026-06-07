@@ -31,6 +31,8 @@ def validate_config():
     if not BRANCH_ID:   missing.append("CASHBARBER_BRANCH_ID")
     if not USER_ID:     missing.append("CASHBARBER_USER_ID")
     if not SERVICES:    missing.append("CASHBARBER_SERVICES")
+    if not BOT_TOKEN:   missing.append("TELEGRAM_BOT_TOKEN")
+    if not CHAT_ID:     missing.append("TELEGRAM_CHAT_ID")
 
     if missing:
         print(f"ERROR: Missing environment variables: {', '.join(missing)}")
@@ -172,13 +174,20 @@ def schedule():
 
 
 def send_telegram(message):
+    print(f"DEBUG BOT_TOKEN: '{BOT_TOKEN}'")
+    print(f"DEBUG CHAT_ID: '{CHAT_ID}'")
+    
     payload = {
         "chat_id": CHAT_ID,
         "text": message
     }    
     response = requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json=payload)
+    print(f"Telegram status: {response.status_code}")
+    print(f"Telegram response: {response.text}")
+
     return response
 
 
 if __name__ == "__main__":
-    schedule()
+   #schedule()
+   send_telegram("🧪 Teste direto")
