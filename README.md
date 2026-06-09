@@ -129,6 +129,11 @@ $env:TELEGRAM_CHAT_ID="your_chat_id"
 python src/agendar.py
 ```
 
+## Author
+
+Thiago Henrique Rover
+[LinkedIn](https://www.linkedin.com/in/thiago-henrique-rover-97b8b3ba/) · [GitHub](https://github.com/thiagorover)
+
 ## License
 
-MIT
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
