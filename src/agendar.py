@@ -12,10 +12,10 @@ EMAIL       = os.environ.get("CASHBARBER_EMAIL", "")
 PASSWORD    = os.environ.get("CASHBARBER_PASSWORD", "")
 TENANT      = os.environ.get("CASHBARBER_TENANT", "")
 BRANCH_ID   = int(os.environ.get("CASHBARBER_BRANCH_ID", "0"))
-USER_ID     = int(os.environ.get("CASHBARBER_USER_ID", "0"))
+BARBER_ID   = int(os.environ.get("CASHBARBER_BARBER_ID", "0"))
 SERVICES    = [int(x) for x in os.environ.get("CASHBARBER_SERVICES", "").split(",") if x]
-START_TIME  = os.environ.get("CASHBARBER_START_TIME", "12:00")
-END_TIME    = os.environ.get("CASHBARBER_END_TIME", "13:00")
+START_TIME  = os.environ.get("CASHBARBER_START_TIME", "10:20")
+END_TIME    = os.environ.get("CASHBARBER_END_TIME", "11:20")
 BOT_TOKEN   = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 CHAT_ID     = os.environ.get("TELEGRAM_CHAT_ID", "")
 
@@ -29,7 +29,7 @@ def validate_config():
     if not PASSWORD:    missing.append("CASHBARBER_PASSWORD")
     if not TENANT:      missing.append("CASHBARBER_TENANT")
     if not BRANCH_ID:   missing.append("CASHBARBER_BRANCH_ID")
-    if not USER_ID:     missing.append("CASHBARBER_USER_ID")
+    if not BARBER_ID:   missing.append("CASHBARBER_BARBER_ID")
     if not SERVICES:    missing.append("CASHBARBER_SERVICES")
     if not BOT_TOKEN:   missing.append("TELEGRAM_BOT_TOKEN")
     if not CHAT_ID:     missing.append("TELEGRAM_CHAT_ID")
@@ -155,7 +155,7 @@ def schedule():
 
     payload = {
         "age_id_filial": BRANCH_ID,
-        "age_id_user": USER_ID,
+        "age_id_user": BARBER_ID,
         "age_inicio": start,
         "age_fim": end,
         "age_sem_preferencia": 0,
