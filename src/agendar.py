@@ -22,7 +22,6 @@ CHAT_ID     = os.environ.get("TELEGRAM_CHAT_ID", "")
 BASE_URL    = "https://api.cashbarber.com.br"
 
 # =========================================
-
 def validate_config():
     missing = []
     if not EMAIL:       missing.append("CASHBARBER_EMAIL")
@@ -40,185 +39,232 @@ def validate_config():
 
     print("Configuration validated. Proceeding...")
 
-def login():
-    print("Logging in...")
-    try:
-        response = requests.post(
-            f"{BASE_URL}/api/auth/login",
-            json={
-                "email": EMAIL,
-                "password": PASSWORD,
-                "captchaToken": None
-            },
-            headers={
-                "Content-Type": "application/json",
-                "Accept": "application/json, text/plain, */*",
-                "Origin": "https://cashbarber.com.br",
-                "Referer": "https://cashbarber.com.br/",
-                "X-Context": "cliente",
-                "X-Tenant": TENANT,
-            }
-        )
-    except requests.exceptions.RequestException as e:
-        print(f"Network error during login: {e}")
-        send_telegram(f"⚠️ Erro de conexão durante o login: {e}")
-        exit(1)
+# Class authentication to CashBarber
+class CashBarberAuth:
 
-    if response.status_code != 200:
-        print(f"Login failed. Status: {response.status_code}")
-        print(f"Response: {response.text}")
-        send_telegram(f"⚠️ Falha no login. Status: {response.status_code}")
-        exit(1)
+    def __init__(self, email, password, tenant, notifier):
+        self._email = email
+        self._password = password
+        self._tenant = tenant
+        self._token = None
+        self._notifier = notifier
+
+    @property
+    def headers(self):
+        if not self._token:
+            raise ValueError("Token is not set. Please login first.")
+        return {
+            "Authorization": f"Bearer {self._token}",
+            "Content-Type": "application/json",
+            "Accept": "application/json, text/plain, */*",
+            "Origin": "https://cashbarber.com.br",
+            "Referer": "https://cashbarber.com.br/",
+            "X-Context": "cliente",
+            "X-Tenant": self._tenant,
+        }
     
-    token = response.headers.get("X-Session-Token")
-    if not token:
-        print("Token not found in login response.")
-        send_telegram("⚠️ Token não encontrado na resposta do login.")
-        exit(1)
+    def _login_headers(self):
+        return {
+            "Content-Type": "application/json",
+            "Accept": "application/json, text/plain, */*",
+            "Origin": "https://cashbarber.com.br",
+            "Referer": "https://cashbarber.com.br/",
+            "X-Context": "cliente",
+            "X-Tenant": self._tenant,
+        }
 
-    print("Login successful.")
-    return token
+    def login(self):
+        print("Logging in...")
+        try:
+            response = requests.post(
+                f"{BASE_URL}/api/auth/login",
+                json={
+                    "email": self._email,
+                    "password": self._password,
+                    "captchaToken": None
+                },
+                headers= self._login_headers()
+            )
+        except requests.exceptions.RequestException as e:
+            print(f"Network error during login: {e}")
+            self._notifier.notify(f"⚠️ Erro de conexão durante o login: {e}")
+            exit(1)
 
-def next_saturday():
-    today = datetime.now()
-    days_until_saturday = (5 - today.weekday() + 7) % 7
-    if days_until_saturday == 0:
-        days_until_saturday = 7
-    saturday = today + timedelta(days=days_until_saturday)
-    return saturday.strftime("%Y-%m-%d")
+        if response.status_code != 200:
+            print(f"Login failed. Status: {response.status_code}")
+            print(f"Response: {response.text}")
+            self._notifier.notify(f"⚠️ Falha no login. Status: {response.status_code}")
+            exit(1)
+        
+        self._token = response.headers.get("X-Session-Token")
+        if not self._token:
+            print("Token not found in login response.")
+            self._notifier.notify("⚠️ Token não encontrado na resposta do login.")
+            exit(1)
 
-def already_scheduled(headers, date):
-    url = f"{BASE_URL}/api/{TENANT}/web/agendamentos/list?page=1"
+        print("Login successful.")
+        return self._token
+
+# Class to manage appointments
+class AppointmentManager:
     
-    try:
-        response = requests.post(url, json={}, headers=headers)
-    except requests.exceptions.RequestException as e:
-        print(f"Network error while fetching appointments: {e}")
-        send_telegram(f"⚠️ Erro de conexão ao buscar agendamentos: {e}")
-        exit(1)
+    def __init__(self, branch_id, barber_id, services, start_time, end_time, tenant, auth, notifier):
+        self._branch_id = branch_id
+        self._barber_id = barber_id
+        self._services = services
+        self._start_time = start_time
+        self._end_time = end_time
+        self._tenant = tenant
+        self._auth = auth
+        self._notifier = notifier
 
-    if response.status_code != 200:
-        print(f"Error fetching appointments. Status: {response.status_code}")
-        print("Aborting for safety. Please check manually.")
-        exit(1)
+    @staticmethod
+    def next_saturday():
+        today = datetime.now()
+        days_until_saturday = (5 - today.weekday() + 7) % 7
+        
+        if days_until_saturday == 0:
+            days_until_saturday = 7
+        saturday = today + timedelta(days=days_until_saturday)
+        
+        return saturday.strftime("%Y-%m-%d")
 
-    data = response.json()
-    upcoming = data.get("futuros", {}).get("data", [])
+    @staticmethod
+    def format_datetime(dt_string):
+        # Converte "2026-06-13 12:00:00" em objeto datetime
+        dt = datetime.strptime(dt_string, "%Y-%m-%d %H:%M:%S")
+        # Formata como "13/06/2026 às 12:00"
+        return dt.strftime("%d/%m/%Y às %H:%M") 
 
-    for appointment in upcoming:
-        if date in appointment.get("age_inicio", "") and appointment.get("age_status") == "Agendado":
-            print(f"Appointment already exists for {date}.")
-            print(f"Existing ID: {appointment.get('id')} | Time: {appointment.get('age_inicio')}")
-            return appointment
 
-    return None
+    def already_scheduled(self, date):
+        url = f"{BASE_URL}/api/{self._tenant}/web/agendamentos/list?page=1"
+        
+        try:
+            response = requests.post(url, json={}, headers=self._auth.headers)
+        except requests.exceptions.RequestException as e:
+            print(f"Network error while fetching appointments: {e}")
+            self._notifier.notify(f"⚠️ Erro de conexão ao buscar agendamentos: {e}")
+            exit(1)
+    
+        if response.status_code != 200:
+            print(f"Error fetching appointments. Status: {response.status_code}")
+            print("Aborting for safety. Please check manually.")
+            exit(1)
+    
+        data = response.json()
+        upcoming = data.get("futuros", {}).get("data", [])
+    
+        for appointment in upcoming:
+            if date in appointment.get("age_inicio", "") and appointment.get("age_status") == "Agendado":
+                print(f"Appointment already exists for {date}.")
+                print(f"Existing ID: {appointment.get('id')} | Time: {appointment.get('age_inicio')}")
+                return appointment
+        return None
+    
 
-def schedule():
-    print("=" * 50)
-    print("CASHBARBER - AUTOMATED SCHEDULER")
-    print("=" * 50)
+    def schedule(self):
+        print("=" * 50)
+        print("CASHBARBER - AUTOMATED SCHEDULER")
+        print("=" * 50)
 
+        date = AppointmentManager.next_saturday()
+
+        date_datetime = datetime.strptime(date, "%Y-%m-%d")
+        date_formatted = date_datetime.strftime('%d/%m/%Y')
+        print(f"\nNext Saturday: {date_formatted}")
+
+        existing = self.already_scheduled(date)
+        
+        if existing:
+            self._notifier.notify(
+                f"📅 O Agendamento para {date_formatted} já existe!\n"
+                f"🆔 ID: {existing.get('id')}\n"
+                f"🕐 Horário: {AppointmentManager.format_datetime(existing.get('age_inicio'))}"
+            )
+            exit(0)
+            
+        start = f"{date} {self._start_time}:00"
+        end   = f"{date} {self._end_time}:00"
+
+        print(f"No existing appointment found. Scheduling from {self._start_time} to {self._end_time}...")
+
+        payload = {
+            "age_id_filial": self._branch_id,
+            "age_id_user": self._barber_id,
+            "age_inicio": start,
+            "age_fim": end,
+            "age_sem_preferencia": 0,
+            "servicos": self._services
+        }
+
+        try:
+            response = requests.post(
+                f"{BASE_URL}/api/{self._tenant}/web/agendamentos",
+                json=payload,
+                headers=self._auth.headers
+            )
+        except requests.exceptions.RequestException as e:
+            print(f"Network error while scheduling appointment: {e}")
+            self._notifier.notify(f"⚠️ Erro de conexão ao agendar: {e}")
+            exit(1)
+
+        print(f"\nStatus: {response.status_code}")
+
+        if response.status_code in [200, 201]:
+            result = response.json()
+            print("Appointment successfully scheduled!")
+            print(f"ID: {result.get('id')}")
+            print(f"Status: {result.get('age_status')}")
+            print(f"Start: {AppointmentManager.format_datetime(result.get('age_inicio'))}")
+            print(f"End: {AppointmentManager.format_datetime(result.get('age_fim'))}")
+
+            self._notifier.notify(
+                f"✅ Agendamento Realizado com Sucesso!\n"
+                f"📅 Data: {AppointmentManager.format_datetime(result.get('age_inicio'))}\n"
+                f"🕐 Término: {AppointmentManager.format_datetime(result.get('age_fim'))}\n"
+                f"🆔 ID: {result.get('id')}"
+            )
+        elif response.status_code == 401:
+            print("Invalid credentials.")
+        else:
+            print("Scheduling failed.")
+            print(f"Response: {response.text}")
+            self._notifier.notify(
+                f"⚠️ Horário das {self._start_time} indisponível para {date_formatted}.\n"
+                f"Acesse o site para escolher outro horário:\n"
+                "https://cashbarber.com.br/barbeariadeluno/inicio"
+            )
+
+# Class for Telegram notifications
+class TelegramNotifier:
+    
+    def __init__(self, bot_token, chat_id):
+        self._bot_token = bot_token
+        self._chat_id = chat_id
+        
+    def notify(self, message):
+        payload = {
+            "chat_id": self._chat_id,
+            "text": message
+        }
+        try:
+            response = requests.post(f"https://api.telegram.org/bot{self._bot_token}/sendMessage", json=payload)
+            if response.status_code != 200:
+                print(f"Erro ao enviar notificação: {response.text}")
+            return response
+        except requests.exceptions.RequestException as e:
+            print(f"Network error while sending Telegram message: {e}")
+
+# Main orchestrator
+if __name__ == "__main__":
+   
     validate_config()
 
-    token = login()
+    notifier = TelegramNotifier(BOT_TOKEN, CHAT_ID)
+    auth = CashBarberAuth(EMAIL, PASSWORD, TENANT, notifier)
+    appoint = AppointmentManager(BRANCH_ID, BARBER_ID, SERVICES, START_TIME, END_TIME, TENANT, auth, notifier)
 
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json",
-        "Accept": "application/json, text/plain, */*",
-        "X-Context": "cliente",
-        "X-Tenant": TENANT,
-        "Origin": "https://cashbarber.com.br",
-        "Referer": "https://cashbarber.com.br/",
-    }
+    auth.login()
+    appoint.schedule()
 
-    date = next_saturday()
-
-    date_datetime = datetime.strptime(date, "%Y-%m-%d")
-    date_formatted = date_datetime.strftime('%d/%m/%Y')
-    print(f"\nNext Saturday: {date_formatted}")
-
-    existing = already_scheduled(headers, date)
-    
-    if existing:
-        send_telegram(
-            f"📅 O Agendamento para {date_formatted} já existe!\n"
-            f"🆔 ID: {existing.get('id')}\n"
-            f"🕐 Horário: {format_datetime(existing.get('age_inicio'))}"
-        )
-        exit(0)
-        
-    start = f"{date} {START_TIME}:00"
-    end   = f"{date} {END_TIME}:00"
-
-    print(f"No existing appointment found. Scheduling from {START_TIME} to {END_TIME}...")
-
-    payload = {
-        "age_id_filial": BRANCH_ID,
-        "age_id_user": BARBER_ID,
-        "age_inicio": start,
-        "age_fim": end,
-        "age_sem_preferencia": 0,
-        "servicos": SERVICES
-    }
-
-    try:
-        response = requests.post(
-            f"{BASE_URL}/api/{TENANT}/web/agendamentos",
-            json=payload,
-            headers=headers
-        )
-    except requests.exceptions.RequestException as e:
-        print(f"Network error while scheduling appointment: {e}")
-        send_telegram(f"⚠️ Erro de conexão ao agendar: {e}")
-        exit(1)
-
-    print(f"\nStatus: {response.status_code}")
-
-    if response.status_code in [200, 201]:
-        result = response.json()
-        print("Appointment successfully scheduled!")
-        print(f"ID: {result.get('id')}")
-        print(f"Status: {result.get('age_status')}")
-        print(f"Start: {format_datetime(result.get('age_inicio'))}")
-        print(f"End: {format_datetime(result.get('age_fim'))}")
-
-        send_telegram(
-            f"✅ Agendamento Realizado com Sucesso!\n"
-            f"📅 Data: {format_datetime(result.get('age_inicio'))}\n"
-            f"🕐 Término: {format_datetime(result.get('age_fim'))}\n"
-            f"🆔 ID: {result.get('id')}"
-        )
-    elif response.status_code == 401:
-        print("Invalid credentials.")
-    else:
-        print("Scheduling failed.")
-        print(f"Response: {response.text}")
-        send_telegram(
-            f"⚠️ Horário das {START_TIME} indisponível para {date_formatted}.\n"
-            f"Acesse o site para escolher outro horário:\n"
-             "https://cashbarber.com.br/barbeariadeluno/inicio"
-        )
-
-
-def send_telegram(message):
-    payload = {
-        "chat_id": CHAT_ID,
-        "text": message
-    }
-
-    try:
-        response = requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json=payload)
-    except requests.exceptions.RequestException as e:
-        print(f"Network error while sending Telegram message: {e}")
-        return None
-    return response
-
-def format_datetime(dt_string):
-    # Converte "2026-06-13 12:00:00" em objeto datetime
-    dt = datetime.strptime(dt_string, "%Y-%m-%d %H:%M:%S")
-    # Formata como "13/06/2026 às 12:00"
-    return dt.strftime("%d/%m/%Y às %H:%M")
-
-if __name__ == "__main__":
-   schedule()
