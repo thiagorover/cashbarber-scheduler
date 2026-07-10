@@ -2,11 +2,12 @@
 # Automated barbershop appointment scheduler via CashBarber API
 import os
 import requests
+from notifiers import Notifier
 from datetime import datetime, timedelta
 
-# =========================================
+# =============================================
 # CONFIGURATION - all via environment variables
-# =========================================
+# =============================================
 
 EMAIL       = os.environ.get("CASHBARBER_EMAIL", "")
 PASSWORD    = os.environ.get("CASHBARBER_PASSWORD", "")
@@ -30,14 +31,13 @@ def validate_config():
     if not BRANCH_ID:   missing.append("CASHBARBER_BRANCH_ID")
     if not BARBER_ID:   missing.append("CASHBARBER_BARBER_ID")
     if not SERVICES:    missing.append("CASHBARBER_SERVICES")
-    if not BOT_TOKEN:   missing.append("TELEGRAM_BOT_TOKEN")
-    if not CHAT_ID:     missing.append("TELEGRAM_CHAT_ID")
-
+    
     if missing:
         print(f"ERROR: Missing environment variables: {', '.join(missing)}")
         exit(1)
 
     print("Configuration validated. Proceeding...")
+
 
 # Class authentication to CashBarber
 class CashBarberAuth:
@@ -104,6 +104,7 @@ class CashBarberAuth:
 
         print("Login successful.")
         return self._token
+
 
 # Class to manage appointments
 class AppointmentManager:
@@ -236,13 +237,17 @@ class AppointmentManager:
                 "https://cashbarber.com.br/barbeariadeluno/inicio"
             )
 
+
 # Class for Telegram notifications
-class TelegramNotifier:
+class TelegramNotifier(Notifier):
     
+    # Constructor for TelegramNotifier
     def __init__(self, bot_token, chat_id):
+        
         self._bot_token = bot_token
         self._chat_id = chat_id
         
+    # Overridden method to send a notification via Telegram
     def notify(self, message):
         payload = {
             "chat_id": self._chat_id,
@@ -256,15 +261,36 @@ class TelegramNotifier:
         except requests.exceptions.RequestException as e:
             print(f"Network error while sending Telegram message: {e}")
 
+
+# Class for console notifications (for testing purposes)
+class ConsoleNotifier(Notifier):
+    
+    # Overridden method to print notifications to the console
+    def notify(self, message):
+        print(f"Notification: {message}")
+
+
 # Main orchestrator
 if __name__ == "__main__":
    
+    # Method to validate configuration before proceeding
     validate_config()
 
-    notifier = TelegramNotifier(BOT_TOKEN, CHAT_ID)
+    # Decide to use Telegram or Console Local for notifications (Polymorphism)
+    if BOT_TOKEN and CHAT_ID:
+        notifier = TelegramNotifier(BOT_TOKEN, CHAT_ID)
+        print("Using Telegram for notifications.")
+    else:
+        notifier = ConsoleNotifier()
+        print("Using console for notifications.")
+
+    # Initialize authentication and appointment manager
     auth = CashBarberAuth(EMAIL, PASSWORD, TENANT, notifier)
+    
+    # Initialize appointment manager with configuration
     appoint = AppointmentManager(BRANCH_ID, BARBER_ID, SERVICES, START_TIME, END_TIME, TENANT, auth, notifier)
 
+    # Call login and schedule methods
     auth.login()
     appoint.schedule()
 

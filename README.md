@@ -43,6 +43,18 @@ Every Sunday at 00:01 (BRT), a scheduled trigger fires, logs into the barbershop
 - **Telegram Bot API** — notifications
 - **GitHub Secrets** — secure credential storage
 
+## Architecture
+
+The script follows an OOP design with dependency injection and single-responsibility classes:
+
+- **`CashBarberAuth`** — logs in, holds the session token, and exposes ready-to-use request headers.
+- **`AppointmentManager`** — owns the scheduling logic (checking for an existing appointment, booking a new one), receiving `auth` and `notifier` as dependencies.
+- **`Notifier`** — abstract base defining the `notify(message)` contract, with two concrete implementations:
+  - **`TelegramNotifier`** — sends notifications via the Telegram Bot API.
+  - **`ConsoleNotifier`** — prints to stdout, picked automatically when Telegram credentials aren't configured.
+
+`AppointmentManager` and `CashBarberAuth` call `notifier.notify(...)` without knowing which concrete class is behind it — the right one is chosen once, at startup.
+
 ## Why an external scheduler?
 
 GitHub Actions' native `cron` is best-effort and can be delayed by several minutes under load. For this use case timing is critical, since the schedule opens at an exact moment and slots fill fast, so an external trigger from cron-job.org fires the workflow precisely at 00:01 BRT via the GitHub API.
@@ -61,8 +73,8 @@ All sensitive data is stored as GitHub Secrets. No credentials are hardcoded.
 | `CASHBARBER_SERVICES` | Comma-separated service IDs |
 | `CASHBARBER_START_TIME` | Appointment start time (HH:MM) |
 | `CASHBARBER_END_TIME` | Appointment end time (HH:MM) |
-| `TELEGRAM_BOT_TOKEN` | Telegram bot token for notifications |
-| `TELEGRAM_CHAT_ID` | Telegram chat ID that receives the messages |
+| `TELEGRAM_BOT_TOKEN` | Telegram bot token for notifications (optional — falls back to console output if unset) |
+| `TELEGRAM_CHAT_ID` | Telegram chat ID that receives the messages (optional — falls back to console output if unset) |
 
 ## Key decisions
 
@@ -75,6 +87,8 @@ All sensitive data is stored as GitHub Secrets. No credentials are hardcoded.
 **Resilient network handling.** Every external request is wrapped in error handling. Failures are classified by severity: a login or booking failure aborts the run, while a notification failure is logged and ignored, since it should never bring down the main task.
 
 **Human-readable notifications.** Dates returned by the API in machine format are converted to a friendly format before being sent to Telegram.
+
+**Pluggable notifications.** `Notifier` is an abstract base with two implementations, `TelegramNotifier` and `ConsoleNotifier`. If Telegram credentials aren't set, the script automatically falls back to printing to the console, so it can be tested locally without configuring a bot.
 
 ## Notifications
 
@@ -93,7 +107,7 @@ Install dependencies (same on every platform):
 pip install requests
 ```
 
-Set the environment variables, then run the script.
+Set the environment variables, then run the script. `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` can be omitted — notifications will print to the console instead.
 
 **Linux / macOS:**
 
