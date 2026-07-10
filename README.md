@@ -1,6 +1,6 @@
 # cashbarber-scheduler
 
-Automated barbershop appointment scheduler built with Python and GitHub Actions, with Telegram notifications.
+Automated barbershop appointment scheduler built with Python and GitHub Actions, with pluggable Telegram/console notifications.
 
 ## The problem
 
@@ -25,13 +25,13 @@ Every Sunday at 00:01 (BRT), a scheduled trigger fires, logs into the barbershop
    |                       |
 [Already booked]      [No appointment yet]
    |                       |
-[Telegram: confirms]  [Tries to book preferred time]
+[Notifies: confirms]  [Tries to book preferred time]
                            |
                   +--------+--------+
                   |                 |
             [Success]         [Slot unavailable]
                   |                 |
-          [Telegram: booked] [Telegram: alert + site link]
+          [Notifies: booked] [Notifies: alert + site link]
 ```
 
 ## Stack
@@ -92,7 +92,7 @@ All sensitive data is stored as GitHub Secrets. No credentials are hardcoded.
 
 ## Notifications
 
-The script reports back through Telegram in every scenario:
+The script reports back through Telegram (or the console, as a fallback) in every scenario:
 
 - Appointment successfully booked
 - An appointment already existed for the target date
