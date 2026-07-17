@@ -1,4 +1,5 @@
-session.json 
-*.png 
-__pycache__/ 
-.env 
+session.json
+*.png
+__pycache__/
+.env
+.vscode/

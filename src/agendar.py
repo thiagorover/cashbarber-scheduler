@@ -13,7 +13,7 @@ EMAIL       = os.environ.get("CASHBARBER_EMAIL", "")
 PASSWORD    = os.environ.get("CASHBARBER_PASSWORD", "")
 TENANT      = os.environ.get("CASHBARBER_TENANT", "")
 BRANCH_ID   = int(os.environ.get("CASHBARBER_BRANCH_ID", "0"))
-BARBER_ID   = int(os.environ.get("CASHBARBER_BARBER_ID", "0"))
+BARBER_NAME = os.environ.get("CASHBARBER_BARBER_NAME", "")
 SERVICES    = [int(x) for x in os.environ.get("CASHBARBER_SERVICES", "").split(",") if x]
 START_TIME  = os.environ.get("CASHBARBER_START_TIME", "10:20")
 END_TIME    = os.environ.get("CASHBARBER_END_TIME", "11:20")
@@ -29,7 +29,7 @@ def validate_config():
     if not PASSWORD:    missing.append("CASHBARBER_PASSWORD")
     if not TENANT:      missing.append("CASHBARBER_TENANT")
     if not BRANCH_ID:   missing.append("CASHBARBER_BRANCH_ID")
-    if not BARBER_ID:   missing.append("CASHBARBER_BARBER_ID")
+    if not BARBER_NAME: missing.append("CASHBARBER_BARBER_NAME")
     if not SERVICES:    missing.append("CASHBARBER_SERVICES")
     
     if missing:
@@ -109,9 +109,9 @@ class CashBarberAuth:
 # Class to manage appointments
 class AppointmentManager:
     
-    def __init__(self, branch_id, barber_id, services, start_time, end_time, tenant, auth, notifier):
+    def __init__(self, branch_id, barber_name, services, start_time, end_time, tenant, auth, notifier):
         self._branch_id = branch_id
-        self._barber_id = barber_id
+        self._barber_name = barber_name
         self._services = services
         self._start_time = start_time
         self._end_time = end_time
@@ -136,6 +136,30 @@ class AppointmentManager:
         dt = datetime.strptime(dt_string, "%Y-%m-%d %H:%M:%S")
         # Formata como "13/06/2026 às 12:00"
         return dt.strftime("%d/%m/%Y às %H:%M") 
+    
+    def _resolve_barber_id(self) -> int:
+        url = f"{BASE_URL}/api/{self._tenant}/web/filiais/{self._branch_id}/barbeiros"
+
+        try:
+            response = requests.get(url, headers=self._auth.headers)
+        except requests.exceptions.RequestException as e:
+            print(f"Network error while fetching barbers: {e}")
+            self._notifier.notify(f"⚠️ Erro de conexão ao buscar barbeiros: {e}")
+            exit(1)
+
+        if response.status_code != 200:
+            print(f"Error fetching barbers. Status: {response.status_code}")
+            print("Aborting for safety. Please check manually.")
+            exit(1)
+        
+        for barber in response.json():
+            if barber['usu_name'].lower() == self._barber_name.lower():
+                return barber['id']
+
+        print(f"Barber '{self._barber_name}' not found.")
+        self._notifier.notify(f"⚠️ Barbeiro '{self._barber_name}' não encontrado.")
+        exit(1)
+
 
 
     def already_scheduled(self, date):
@@ -192,7 +216,7 @@ class AppointmentManager:
 
         payload = {
             "age_id_filial": self._branch_id,
-            "age_id_user": self._barber_id,
+            "age_id_user": self._resolve_barber_id(),
             "age_inicio": start,
             "age_fim": end,
             "age_sem_preferencia": 0,
@@ -288,7 +312,7 @@ if __name__ == "__main__":
     auth = CashBarberAuth(EMAIL, PASSWORD, TENANT, notifier)
     
     # Initialize appointment manager with configuration
-    appoint = AppointmentManager(BRANCH_ID, BARBER_ID, SERVICES, START_TIME, END_TIME, TENANT, auth, notifier)
+    appoint = AppointmentManager(BRANCH_ID, BARBER_NAME, SERVICES, START_TIME, END_TIME, TENANT, auth, notifier)
 
     # Call login and schedule methods
     auth.login()

@@ -69,7 +69,7 @@ All sensitive data is stored as GitHub Secrets. No credentials are hardcoded.
 | `CASHBARBER_PASSWORD` | Account password |
 | `CASHBARBER_TENANT` | Barbershop identifier in the platform |
 | `CASHBARBER_BRANCH_ID` | Branch ID |
-| `CASHBARBER_BARBER_ID` | Barber ID |
+| `CASHBARBER_BARBER_NAME` | Barber's full name |
 | `CASHBARBER_SERVICES` | Comma-separated service IDs |
 | `CASHBARBER_START_TIME` | Appointment start time (HH:MM) |
 | `CASHBARBER_END_TIME` | Appointment end time (HH:MM) |
@@ -116,7 +116,7 @@ export CASHBARBER_EMAIL=your@email.com
 export CASHBARBER_PASSWORD=yourpassword
 export CASHBARBER_TENANT=yourtenant
 export CASHBARBER_BRANCH_ID=0000
-export CASHBARBER_BARBER_ID=0000
+export CASHBARBER_BARBER_NAME=barber_name
 export CASHBARBER_SERVICES=00000,00000
 export CASHBARBER_START_TIME=10:20
 export CASHBARBER_END_TIME=11:20
@@ -133,7 +133,7 @@ $env:CASHBARBER_EMAIL="your@email.com"
 $env:CASHBARBER_PASSWORD="yourpassword"
 $env:CASHBARBER_TENANT="yourtenant"
 $env:CASHBARBER_BRANCH_ID="0000"
-$env:CASHBARBER_BARBER_ID="0000"
+$env:CASHBARBER_BARBER_NAME="barber_name"
 $env:CASHBARBER_SERVICES="00000,00000"
 $env:CASHBARBER_START_TIME="10:20"
 $env:CASHBARBER_END_TIME="11:20"
