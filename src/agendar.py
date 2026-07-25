@@ -4,6 +4,7 @@ import os
 import requests
 from notifiers import Notifier
 from datetime import datetime, timedelta
+from exceptions import AppointmentError, BarberNotFoundError, BookingError, LoginError
 
 # =============================================
 # CONFIGURATION - all via environment variables
@@ -86,21 +87,17 @@ class CashBarberAuth:
                 headers= self._login_headers()
             )
         except requests.exceptions.RequestException as e:
-            print(f"Network error during login: {e}")
-            self._notifier.notify(f"⚠️ Erro de conexão durante o login: {e}")
-            exit(1)
+            raise LoginError(f"Network error during login: {e}", 
+                             f"⚠️ Erro de conexão durante o login: {e}")
 
         if response.status_code != 200:
-            print(f"Login failed. Status: {response.status_code}")
-            print(f"Response: {response.text}")
-            self._notifier.notify(f"⚠️ Falha no login. Status: {response.status_code}")
-            exit(1)
+            raise LoginError(f"Login failed. Status: {response.status_code}. Response: {response.text}", 
+                             f"⚠️ Falha no login. Status: {response.status_code}")
         
         self._token = response.headers.get("X-Session-Token")
         if not self._token:
-            print("Token not found in login response.")
-            self._notifier.notify("⚠️ Token não encontrado na resposta do login.")
-            exit(1)
+            raise LoginError("Token not found in login response.", 
+                             "⚠️ Token não encontrado na resposta do login.")
 
         print("Login successful.")
         return self._token
@@ -137,29 +134,26 @@ class AppointmentManager:
         # Formata como "13/06/2026 às 12:00"
         return dt.strftime("%d/%m/%Y às %H:%M") 
     
+
     def _resolve_barber_id(self) -> int:
         url = f"{BASE_URL}/api/{self._tenant}/web/filiais/{self._branch_id}/barbeiros"
 
         try:
             response = requests.get(url, headers=self._auth.headers)
         except requests.exceptions.RequestException as e:
-            print(f"Network error while fetching barbers: {e}")
-            self._notifier.notify(f"⚠️ Erro de conexão ao buscar barbeiros: {e}")
-            exit(1)
+            raise BarberNotFoundError(f"Network error while fetching barbers: {e}", 
+                                      f"⚠️ Erro de conexão ao buscar barbeiros: {e}")
 
         if response.status_code != 200:
-            print(f"Error fetching barbers. Status: {response.status_code}")
-            print("Aborting for safety. Please check manually.")
-            exit(1)
+            raise BarberNotFoundError(f"Error fetching barbers. Status: {response.status_code}. Response: {response.text}",
+                                      f"⚠️ Erro ao buscar barbeiros. Status: {response.status_code}.")
         
         for barber in response.json():
             if barber['usu_name'].lower() == self._barber_name.lower():
                 return barber['id']
 
-        print(f"Barber '{self._barber_name}' not found.")
-        self._notifier.notify(f"⚠️ Barbeiro '{self._barber_name}' não encontrado.")
-        exit(1)
-
+        raise BarberNotFoundError(f"Barber '{self._barber_name}' not found.", 
+                                  f"⚠️ Barbeiro '{self._barber_name}' não encontrado.")
 
 
     def already_scheduled(self, date):
@@ -168,14 +162,12 @@ class AppointmentManager:
         try:
             response = requests.post(url, json={}, headers=self._auth.headers)
         except requests.exceptions.RequestException as e:
-            print(f"Network error while fetching appointments: {e}")
-            self._notifier.notify(f"⚠️ Erro de conexão ao buscar agendamentos: {e}")
-            exit(1)
-    
+            raise AppointmentError(f"Network error while fetching appointments: {e}", 
+                                   f"⚠️ Erro de conexão ao buscar agendamentos: {e}")
+
         if response.status_code != 200:
-            print(f"Error fetching appointments. Status: {response.status_code}")
-            print("Aborting for safety. Please check manually.")
-            exit(1)
+            raise AppointmentError(f"Error fetching appointments. Status: {response.status_code}. "
+                                   "Aborting for safety. Please check manually.")
     
         data = response.json()
         upcoming = data.get("futuros", {}).get("data", [])
@@ -230,9 +222,7 @@ class AppointmentManager:
                 headers=self._auth.headers
             )
         except requests.exceptions.RequestException as e:
-            print(f"Network error while scheduling appointment: {e}")
-            self._notifier.notify(f"⚠️ Erro de conexão ao agendar: {e}")
-            exit(1)
+            raise AppointmentError(f"Network error while scheduling appointment: {e}", f"⚠️ Erro de conexão ao agendar: {e}")
 
         print(f"\nStatus: {response.status_code}")
 
@@ -253,13 +243,12 @@ class AppointmentManager:
         elif response.status_code == 401:
             print("Invalid credentials.")
         else:
-            print("Scheduling failed.")
-            print(f"Response: {response.text}")
-            self._notifier.notify(
-                f"⚠️ Horário das {self._start_time} indisponível para {date_formatted}.\n"
-                f"Acesse o site para escolher outro horário:\n"
-                "https://cashbarber.com.br/barbeariadeluno/inicio"
-            )
+            raise AppointmentError(
+                    f"Scheduling failed. Status: {response.status_code}. Response: {response.text}",
+                    f"⚠️ Horário das {self._start_time} indisponível para {date_formatted}.\n"
+                    f"Acesse o site para escolher outro horário:\n"
+                    f"https://cashbarber.com.br/barbeariadeluno/inicio"
+                )
 
 
 # Class for Telegram notifications
@@ -314,7 +303,32 @@ if __name__ == "__main__":
     # Initialize appointment manager with configuration
     appoint = AppointmentManager(BRANCH_ID, BARBER_NAME, SERVICES, START_TIME, END_TIME, TENANT, auth, notifier)
 
-    # Call login and schedule methods
-    auth.login()
-    appoint.schedule()
+    # Call login method
+    try:
+        auth.login()
+    except BookingError as e:
+        # Log the error message for debugging
+        print(e.log_message)
 
+        # Validate if there is a user message to notify
+        if e.user_message:
+            # Notify the user about the error
+            notifier.notify(e.user_message)
+        
+        # Exit the program due to the error
+        exit(1)
+
+    # Call schedule method to attempt scheduling the appointment
+    try:
+        appoint.schedule()
+    except BookingError as e:
+        # Log the error message for debugging
+        print(e.log_message)
+
+        # Validate if there is a user message to notify
+        if e.user_message:
+            # Notify the user about the error
+            notifier.notify(e.user_message)
+
+        # Exit the program due to the error
+        exit(1)
