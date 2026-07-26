@@ -197,6 +197,7 @@ class AppointmentManager:
             self._notifier.notify(
                 f"📅 O Agendamento para {date_formatted} já existe!\n"
                 f"🆔 ID: {existing.get('id')}\n"
+                f"💈 Barbeiro: {self._barber_name}\n"
                 f"🕐 Horário: {AppointmentManager.format_datetime(existing.get('age_inicio'))}"
             )
             exit(0)
@@ -230,15 +231,18 @@ class AppointmentManager:
             result = response.json()
             print("Appointment successfully scheduled!")
             print(f"ID: {result.get('id')}")
+            print(f"Barber: {self._barber_name}")
             print(f"Status: {result.get('age_status')}")
             print(f"Start: {AppointmentManager.format_datetime(result.get('age_inicio'))}")
             print(f"End: {AppointmentManager.format_datetime(result.get('age_fim'))}")
 
             self._notifier.notify(
                 f"✅ Agendamento Realizado com Sucesso!\n"
-                f"📅 Data: {AppointmentManager.format_datetime(result.get('age_inicio'))}\n"
-                f"🕐 Término: {AppointmentManager.format_datetime(result.get('age_fim'))}\n"
-                f"🆔 ID: {result.get('id')}"
+                f"🆔 ID: {result.get('id')}\n"
+                f"💈 Barbeiro: {self._barber_name}\n"
+                f"📅 Data e Hora:\n"
+                f" -> Início: {AppointmentManager.format_datetime(result.get('age_inicio'))}\n"
+                f" -> Término: {AppointmentManager.format_datetime(result.get('age_fim'))}\n"
             )
         elif response.status_code == 401:
             print("Invalid credentials.")
